@@ -1,6 +1,3 @@
-from aiogram import types
-
-
 QUESTIONS = [
     {
         'question': 'Вы любите плавать так же как морские котики?',
