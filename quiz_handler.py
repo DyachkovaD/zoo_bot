@@ -1,6 +1,5 @@
 import json
 
-from aiogram.types import Message
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
@@ -13,28 +12,23 @@ from random import sample
 
 from questions import QUESTIONS, ANIMALS
 
-
-
 router = Router()
+
 
 class Quiz(StatesGroup):
     quest = State()
-    rezult_messsage = State()
     feadback = State()
+    text_to_stuff = State()
 
-quiz_rezult = {'amphibian': 0,
-               'reptile': 0,
-               'mammal': 0,
-               'bird': 0}
-
-questions = QUESTIONS.copy()
-
-feadbacks = []
-
+    quiz_rezult = State()
+    questions = State()
 
 
 @router.message(Quiz.quest)
 async def make_question(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    quiz_rezult, questions = data['quiz_rezult'], data['questions']
+
     if message.text.strip().lower() not in ['1', '2', '3', '4', 'начать']:
         await message.answer(f'Я Вас не понял \nОтветом могут быть только цифры от 1 до 4')
         return
@@ -48,6 +42,7 @@ async def make_question(message: types.Message, state: FSMContext):
             quiz_rezult['mammal'] += 1
         elif message.text == '4':
             quiz_rezult['bird'] += 1
+        await state.update_data({'quiz_rezult': quiz_rezult})
 
     if not questions:
         await state.clear()
@@ -61,28 +56,21 @@ async def make_question(message: types.Message, state: FSMContext):
                                  f'🫧 Подробнее о программе опекунства: ' \
                                  f'<a href="https://moscowzoo.ru/about/guardianship">«Клуб друзей зоопарка»</a>'
 
-                await state.set_data({'rezult_message': rezult_message})
+                await state.set_data({'rezult_name': win_animal['name']})
                 kb = [
-                    [
-                        InlineKeyboardButton(text='Попробовать ещё раз?', callback_data='replay'),
-                        InlineKeyboardButton(text='Связаться с сотрудником', callback_data='contact'),
-                        InlineKeyboardButton(text='Поделиться в VK', callback_data='replay',
-                                             url=f'https://vk.com/share.php?title= Ваш возможный подопечный:'),
-                        InlineKeyboardButton(text='Оставить отзыв', callback_data='feadback')
-                    ],
+                        [InlineKeyboardButton(text='Попробовать ещё раз?', callback_data='replay')],
+                        [InlineKeyboardButton(text='Связаться с сотрудником Зоопарка', callback_data='contact')],
+                        [InlineKeyboardButton(text='Поделиться в VK', callback_data='replay',
+                                              url=f'https://vk.com/share.php?url={win_animal["url"]}'
+                                                  f'&title=@totem_zoo_bot\nВаше тотемное животное: {win_animal["name"]}'
+                                                  f'&image={win_animal["photo"]}',)],
+                        [InlineKeyboardButton(text='Оставить отзыв', callback_data='feadback')]
                 ]
-                # inlinekb = InlineKeyboardMarkup(inline_keyboard=kb)
-                # buttons = [
-                #     [InlineKeyboardButton(text='Попробовать ещё раз?', callback_data='replay')],
-                #     [InlineKeyboardButton(text='Связаться с сотрудником', callback_data='contact')],
-                #     [InlineKeyboardButton(text='Поделиться в VK', url=f'https://vk.com/share.php?title= Ваш возможный подопечный: ')],
-                #     [InlineKeyboardButton(text='Оставить отзыв', callback_data='feadback')]
-                # ]
                 inlinekb = InlineKeyboardMarkup(inline_keyboard=kb)
 
-
                 await message.answer(f'Вы завершили викторину \n'
-                                     f'Ваше тотемное животное: {win_animal["name"]}', reply_markup=types.ReplyKeyboardRemove())
+                                     f'Ваше тотемное животное: {win_animal["name"]}',
+                                     reply_markup=types.ReplyKeyboardRemove())
                 await message.answer_photo(photo=win_animal['photo'])
 
                 await message.answer(rezult_message, parse_mode='HTML', reply_markup=inlinekb)
@@ -92,6 +80,7 @@ async def make_question(message: types.Message, state: FSMContext):
     question = sample(questions, 1)[0]
     questions.pop(questions.index(question))
     answers = question['answers']
+    await state. update_data({'questions': questions})
     builder = ReplyKeyboardBuilder()
     num = ['1', '2', '3', '4']
     for _ in num:
@@ -107,15 +96,18 @@ async def make_question(message: types.Message, state: FSMContext):
         reply_markup=builder.as_markup(resize_keyboard=True),
     )
 
+
 @router.callback_query(F.data == 'replay')
 async def replay(callback: types.CallbackQuery, state: FSMContext):
-    global quiz_rezult, questions
-    quiz_rezult = {'amphibian': 0,
-                   'reptile': 0,
-                   'mammal': 0,
-                   'bird': 0}
-
-    questions = QUESTIONS.copy()
+    await state.set_data(
+        {'quiz_rezult': {
+            'amphibian': 0,
+            'reptile': 0,
+            'mammal': 0,
+            'bird': 0},
+            'questions': QUESTIONS.copy()
+        }
+    )
 
     await state.set_state(Quiz.quest.state)
     kb = [[types.KeyboardButton(text='Начать')]]
@@ -129,29 +121,48 @@ async def replay(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == 'contact')
 async def contact(callback: types.CallbackQuery, state: FSMContext):
-    rezult_message = await state.get_data()
-    await bot.send_message(chat_id=1875707606, text=rezult_message['rezult_message'])
-    await callback.message.answer(f'✏️ Telegram: @darya_dy99\n'\
-                         f'✉    E-mail: yki.yki@bk.ru\n'
-                         f'📞    +7-9хх-ххх-хх-хх')
+    rezult_name = await state.get_data()
+    buttons = [[types.KeyboardButton(text=f'🦉 Чат с сотрудником 🦉\n Результат викторины: \n{rezult_name["rezult_name"]}')]]
+    kb = types.ReplyKeyboardMarkup(
+        keyboard=buttons,
+        resize_keyboard=True
+    )
+    await callback.message.answer(f'Чтобы узнать больше о программе опекунства, '
+                                  f'Вы можете связаться с нашим сотрудником Дарьей: \n\n'
+                                  f'✏   Telegram: @darya_dy99\n'
+                                  f'✉   E-mail: yki.yki@bk.ru\n'
+                                  f'📞   +7-9хх-ххх-хх-хх', reply_markup=kb)
+    await state.set_state(Quiz.text_to_stuff.state)
     await callback.answer()
+
+
+@router.message(Quiz.text_to_stuff)
+async def text_to_stuff(message: types.Message, state: FSMContext):
+    await message.copy_to(chat_id=1875707606, reply_markup=types.ReplyKeyboardRemove())
+    await state.clear()
+
 
 @router.callback_query(F.data == 'feadback')
 async def feadback_state(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(Quiz.feadback.state)
-    await callback.message.answer(f'🫧 Напишите свои впечатления о нашем боте или свои предложения по его улучшению. \n\n'
-                         f'А мы постараемся сделать его удобнее для Вас 🐻‍❄')
+    await callback.message.answer(
+        f'🫧 Напишите свои впечатления о нашем боте или свои предложения по его улучшению. \n\n'
+        f'А мы постараемся сделать его удобнее для Вас 🐻‍❄')
     await callback.answer()
 
+
 @router.message(Quiz.feadback)
-async def feadback_get(message: types.Message, state: FSMContext):
-    with open('feadbacks.json', 'a') as fb_file:
-        fb = {
-            'feadback': message.text,
-            'user': message.from_user.username
-         }
-        fb = json.dumps(fb, indent=4, ensure_ascii=False)
-        fb_file.write(fb)
+async def feadback_add(message: types.Message, state: FSMContext):
+    with open('feadbacks.json', 'r', encoding='utf8') as fb_file:
+        fb = json.load(fb_file)
+        with open('feadbacks.json', 'w', encoding='utf8') as new_fb_file:
+            new = {
+                'feadback': message.text,
+                'user': message.from_user.username
+            }
+            fb.append(new)
+            new_data = json.dumps(fb, indent=4, ensure_ascii=False)
+            new_fb_file.write(new_data)
 
     await message.answer(f'Спасибо за Ваш отзыв! 🦉')
     await state.clear()

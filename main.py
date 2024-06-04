@@ -6,10 +6,10 @@ import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
-from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 
 from token_data import TOKEN
+from questions import QUESTIONS
 from quiz_handler import router, Quiz
 
 dp = Dispatcher()
@@ -28,6 +28,16 @@ async def command_start_handler(message: types.Message, state: FSMContext):
         resize_keyboard=True
     )
     await message.answer(f'Привет! \nДавайте узнаем Ваше тотемное животное! 🐒', reply_markup=keyboard)
+
+    await state.set_data(
+        {'quiz_rezult': {
+            'amphibian': 0,
+            'reptile': 0,
+            'mammal': 0,
+            'bird': 0},
+            'questions': QUESTIONS.copy()
+        }
+    )
 
 async def main() -> None:
     await dp.start_polling(bot)
